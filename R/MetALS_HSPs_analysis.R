@@ -27,19 +27,6 @@ dfall <- dfall %>%
 dfall$outcome <- ifelse(dfall$case == "Patient", 1, 0)
 
 
-# Identify and remove outliers
-idxhsp70 <- c(abs(scale(log(dfall$hsp70_ngperml))) > 4 & !is.na(log(dfall$hsp70_ngperml)) )
-idxhsp90 <- c(abs(scale(log(dfall$hsp90_ngperml))) > 4 & !is.na(log(dfall$hsp90_ngperml)) )
-idxdnajc7 <- c(abs(scale(log(dfall$dnajc7_ngperml))) > 4 & !is.na(log(dfall$dnajc7_ngperml)) )
-
-dfall$hsp70_ngperml[ idxhsp70 ]
-dfall$hsp90_ngperml[ idxhsp90 ] 
-dfall$dnajc7_ngperml[ idxdnajc7 ]
-
-dfall$hsp70_ngperml[ idxhsp70 ] <- NA
-dfall$hsp90_ngperml[ idxhsp90 ] <- NA
-dfall$dnajc7_ngperml[ idxdnajc7 ] <- NA
-
 
 # Extract first measurement for each person (note only Germany and Ireland2 have repeated measures)
 dfbase <- dfall %>% 
@@ -49,6 +36,10 @@ dfbase <- dfall %>%
     ungroup()
 dfbase$case <- as.factor(dfbase$case)
 
+# Define survival outcome variable
+dfbase <- dfbase %>%
+    mutate(survoutcome = case_when(vital_status %in% c("Died", "Tracheotomy") ~ 1,
+                                   vital_status == "Alive" ~ 0))
 
 
 #### Descriptive statistics ####
@@ -60,14 +51,14 @@ cat_vars <- c("case", "sex", "site_onset",
               "isced1997", "el_escorial")
 tab1 <- CreateTableOne(demo_clin[ demo_clin != "cohort"],
                        strata = c("case", "cohort"), factorVars = cat_vars, data = dfbase )
-tab1b <- print(tab1, nonnormal = non_par, exact = c("gender", "site_onset", "staging"),
+tab1b <- print(tab1, nonnormal = non_par, exact = c("sex", "site_onset", "staging", "isced1997"),
                quote = FALSE, noSpaces = TRUE, includeNA = TRUE,
                printToggle = FALSE, showAllLevels = TRUE)
 
 #### Make Table 1 of descriptive statistics overall ####
 tab1_total <- CreateTableOne(demo_clin[ demo_clin != "cohort"], 
                              strata = c("case"), factorVars = cat_vars, data = dfbase)
-tab1_total <- print(tab1_total, nonnormal = non_par, exact = c("gender", "site_onset", "staging"),
+tab1_total <- print(tab1_total, nonnormal = non_par, exact = c("sex", "site_onset", "staging", "isced1997"),
                     quote = FALSE, noSpaces = TRUE,
                     printToggle = FALSE, showAllLevels = TRUE)
 
@@ -90,8 +81,8 @@ Fig2b <- ggcorrplot(corsPatients, type = "lower", lab = TRUE) + ggtitle("ALS Cas
 Fig2a + Fig2b + plot_layout(guides = "collect")
 
 
-# Figure 2
-tiff("Graphs/Figure2.tiff", width = 800, height = 460)
+# Supplementary Figure 2
+tiff("Graphs/SuppFigure2.tiff", width = 800, height = 460)
     Fig2a + Fig2b + plot_layout(guides = "collect")
 dev.off()
 
@@ -302,13 +293,13 @@ g_hsp90_dnajc7 <- ggplot(dfall,
 
 plot_spacer() + (g_hsp70_dnajc7 / g_hsp70_hsp90 / g_hsp90_dnajc7) + plot_spacer()
 
-tiff("Graphs/Figure3.tiff", width = 800, height = 800)
+tiff("Graphs/Figure2.tiff", width = 800, height = 800)
     g_hsp70_dnajc7 / g_hsp70_hsp90 / g_hsp90_dnajc7
 dev.off()
 
 
 #### Plot ratios of HSPs
-gSuppFig2A <- ggplot(dfall,
+gSuppFig3A <- ggplot(dfall,
        aes(x = case, y = log(dnajc7_ngperml)/log(hsp70_ngperml))) +
     geom_boxplot() + geom_beeswarm(alpha = 0.5) +
     xlab("") + ylab("Ratio log(DNAJC7) / log(HSP70)") + ggtitle("A") +
@@ -317,7 +308,7 @@ gSuppFig2A <- ggplot(dfall,
                        label.x = 1.3,
                        size = 5) +
     theme_bw(base_size = 14)
-gSuppFig2B <- ggplot(dfall,
+gSuppFig3B <- ggplot(dfall,
        aes(x = case, y = log(hsp90_ngperml)/log(hsp70_ngperml))) +
     geom_boxplot() + geom_beeswarm(alpha = 0.5) +
     xlab("") + ylab("Ratio log(HSP90) / log(HSP70)") + ggtitle("B") +
@@ -326,7 +317,7 @@ gSuppFig2B <- ggplot(dfall,
                        label.x = 1.3,
                        size = 5) +
     theme_bw(base_size = 14)
-gSuppFig2C <- ggplot(dfall,
+gSuppFig3C <- ggplot(dfall,
        aes(x = case, y = log(dnajc7_ngperml)/log(hsp90_ngperml))) +
     geom_boxplot() + geom_beeswarm(alpha = 0.5) +
     xlab("") + ylab("Ratio log(DNAJC7) / log(HSP90)") + ggtitle("C") +
@@ -336,100 +327,148 @@ gSuppFig2C <- ggplot(dfall,
                        size = 5) +
     theme_bw(base_size = 14)
 
-gSuppFig2A + gSuppFig2B + gSuppFig2C
+gSuppFig3A + gSuppFig3B + gSuppFig3C
 
-tiff("Graphs/SuppFigure2.tiff", width = 800, height = 460)
-    gSuppFig2A + gSuppFig2B + gSuppFig2C
+tiff("Graphs/SuppFigure3.tiff", width = 800, height = 460)
+    gSuppFig3A + gSuppFig3B + gSuppFig3C
 dev.off()
 
 
 
 #### Plot distributions of hsps vs onset
-gFig4A <- ggplot(dfall %>%
+gFig3A <- ggplot(dfall %>%
            filter(time_onset2lab < 200),
        aes(x = time_onset2lab, y = hsp70_ngperml, group = id)) +
     geom_point() + geom_line() + scale_y_log10() +
-    xlab("") + ylab("ng/ml") + ggtitle("HSP70") +
+    xlab("") + ylab("ng/ml \n(log scaled)") + ggtitle("HSP70") +
     #facet_wrap(~cohort, scales = "free", ncol=1) +
     theme_bw(base_size = 12)
 
-gFig4B <- ggplot(dfall %>%
+gFig3B <- ggplot(dfall %>%
            filter(time_onset2lab < 200 & cohort != "Italy"),
        aes(x = time_onset2lab, y = hsp90_ngperml, group = id)) +
     geom_point() + geom_line() + scale_y_log10() +
-    xlab("") + ylab("ng/ml") + ggtitle("HSP90") +
+    xlab("") + ylab("ng/ml \n(log scaled)") + ggtitle("HSP90") +
     #facet_wrap(~cohort, scales = "free", ncol=1) +
     theme_bw(base_size = 12)
 
-gFig4C <- ggplot(dfall %>% filter(time_onset2lab < 200),
+gFig3C <- ggplot(dfall %>% filter(time_onset2lab < 200),
        aes(x = time_onset2lab, y = dnajc7_ngperml, group = id)) +
     geom_point() + geom_line() + scale_y_log10() +
-    xlab("Months from ALS onset") + ylab("ng/ml") + ggtitle("DNAJC7") +
+    xlab("Months from ALS onset") + ylab("ng/ml \n(log scaled)") + ggtitle("DNAJC7") +
     #facet_wrap(~cohort, scales = "free", ncol=1) +
     theme_bw(base_size = 12)
 
-gFig4A / gFig4B / gFig4C
+gFig3A / gFig3B / gFig3C
 
-tiff("Graphs/Figure4.tiff", width = 600, height = 800)
-    gFig4A / gFig4B / gFig4C
+tiff("Graphs/Figure3.tiff", width = 600, height = 800)
+    gFig3A / gFig3B / gFig3C
 dev.off()
 
 
 #### Plot HSPs versus ALSFRS score
-gSuppFig3a <- ggplot(dfall,
+gSuppFig4a <- ggplot(dfall,
        aes(x = alsfrs_total, y = hsp70_ngperml, group = id)) + 
     geom_point() + geom_line() + scale_y_log10() +
     #expand_limits(x = 0) +
     xlab("Total ALSFRS-r") + ylab("ng/ml") + ggtitle("HSP70") +
     theme_bw(base_size = 12)
 
-gSuppFig3b <- ggplot(dfall,
+gSuppFig4b <- ggplot(dfall,
        aes(x = alsfrs_total, y = log(hsp90_ngperml), group = id)) +
     geom_point() + geom_line() + scale_y_log10() +
     #expand_limits(x = 0) +
     xlab("Total ALSFRS-r") + ylab("ng/ml") + ggtitle("HSP90") +
     theme_bw(base_size = 12)
 
-gSuppFig3c <- ggplot(dfall,
+gSuppFig4c <- ggplot(dfall,
        aes(x = alsfrs_total, y = log(dnajc7_ngperml), group = id)) +
     geom_point() + geom_line() + scale_y_log10() +
     #expand_limits(x = 0) +
     xlab("Total ALSFRS-r") + ylab("ng/ml") + ggtitle("DNAJC7") +
     theme_bw(base_size = 12)
 
-gSuppFig3a / gSuppFig3b / gSuppFig3c
+gSuppFig4a / gSuppFig4b / gSuppFig4c
 
-tiff("Graphs/SuppFigure3_alsfrsr.tiff", width = 600, height = 800)
-    gSuppFig3a / gSuppFig3b / gSuppFig3c
+tiff("Graphs/SuppFigure4_alsfrsr.tiff", width = 600, height = 800)
+    gSuppFig4a / gSuppFig4b / gSuppFig4c
 dev.off()
 
+
+### Make flag variable for rows without missing variables for main analysis ###
+dfbase_noDE <- dfbase_noDE %>% 
+    mutate(HSP70_NA = if_else(!is.na(log(hsp70_ngperml)) & !is.na(sex) & !is.na(age_survey), FALSE, TRUE),
+           HSP90_NA = if_else(!is.na(log(hsp90_ngperml)) & !is.na(sex) & !is.na(age_survey), FALSE, TRUE),
+           DNAJC7_NA = if_else(!is.na(log(dnajc7_ngperml)) & !is.na(sex) & !is.na(age_survey), FALSE, TRUE),
+           HSP70DNAJC7_NA = as.logical(HSP70_NA * DNAJC7_NA)) %>% 
+    data.frame()
 
 
 #### Fit main analysis glm models ####
 # cohort to be included as random effect.
 glm_hsp70 <- glmer(outcome ~ log(hsp70_ngperml) + sex + age_survey + (1|cohort),
-                   data = dfbase_noDE, family = "binomial")
+                   data = dfbase_noDE %>% 
+                       filter(HSP70_NA == FALSE), family = "binomial")
 glm_hsp90 <- glmer(outcome ~ log(hsp90_ngperml) + sex + age_survey + (1|cohort),
-                   data = dfbase_noDE, family = "binomial")
+                   data = dfbase_noDE %>% 
+                       filter(HSP90_NA == FALSE), family = "binomial")
 glm_dnajc7 <- glmer(outcome ~ log(dnajc7_ngperml) + sex + age_survey + (1|cohort),
-                    data = dfbase_noDE, family = "binomial")
+                    data = dfbase_noDE %>% 
+                        filter(DNAJC7_NA == FALSE), family = "binomial")
 glm_hsp70dnajc7 <- glmer(outcome ~ log(dnajc7_ngperml) + log(hsp70_ngperml) + 
                              sex + age_survey + (1|cohort),
-                         data = dfbase_noDE, family = "binomial")
+                         data = dfbase_noDE %>% 
+                             filter(HSP70DNAJC7_NA == FALSE), family = "binomial")
+
+
+# Identify outliers greater 4 SD on log scale
+idxhsp70 <- c(abs(scale(log(dfbase_noDE$hsp70_ngperml))) > 4 & !is.na(log(dfbase_noDE$hsp70_ngperml)) )
+idxhsp90 <- c(abs(scale(log(dfbase_noDE$hsp90_ngperml))) > 4 & !is.na(log(dfbase_noDE$hsp90_ngperml)) )
+idxdnajc7 <- c(abs(scale(log(dfbase_noDE$dnajc7_ngperml))) > 4 & !is.na(log(dfbase_noDE$dnajc7_ngperml)) )
+
+dfbase_noDE$hsp70_ngperml[ idxhsp70 ]
+dfbase_noDE$hsp90_ngperml[ idxhsp90 ] 
+dfbase_noDE$dnajc7_ngperml[ idxdnajc7 ]
+
+# Fit sensitivity analysis
+glm_hsp70dnajc7_sensitivity <- glmer(outcome ~ log(dnajc7_ngperml) + log(hsp70_ngperml) + 
+                             sex + age_survey + (1|cohort),
+                         data = dfbase_noDE %>% 
+                             filter(HSP70DNAJC7_NA == FALSE & !idxhsp70 & !idxdnajc7),
+                         family = "binomial")
+
 
 
 summary_glms <- bind_rows(data.frame(model = "hsp70",
                                      nobs = glance(glm_hsp70)$nobs,
-                                     tidy(glm_hsp70, conf.int = TRUE)),
+                                     ncontrols = sum(glm_hsp70@resp$y ==0),
+                                     npatients = sum(glm_hsp70@resp$y ==1),
+                                     tidy(glm_hsp70, conf.int = TRUE,
+                                          exponentiate = TRUE)),
                           data.frame(model = "hsp90",
                                      nobs = glance(glm_hsp90)$nobs,
-                                     tidy(glm_hsp90, conf.int = TRUE)),
+                                     ncontrols = sum(glm_hsp90@resp$y ==0),
+                                     npatients = sum(glm_hsp90@resp$y ==1),
+                                     tidy(glm_hsp90, conf.int = TRUE,
+                                          exponentiate = TRUE)),
                           data.frame(model = "dnajc7",
                                      nobs = glance(glm_dnajc7)$nobs,
-                                     tidy(glm_dnajc7, conf.int = TRUE)),
+                                     ncontrols = sum(glm_dnajc7@resp$y ==0),
+                                     npatients = sum(glm_dnajc7@resp$y ==1),
+                                     tidy(glm_dnajc7, conf.int = TRUE,
+                                          exponentiate = TRUE)),
                           data.frame(model = "hsp70 + dnajc7",
                                      nobs = glance(glm_hsp70dnajc7)$nobs,
-                                     tidy(glm_hsp70dnajc7, conf.int = TRUE)))
+                                     ncontrols = sum(glm_hsp70dnajc7@resp$y ==0),
+                                     npatients = sum(glm_hsp70dnajc7@resp$y ==1),
+                                     tidy(glm_hsp70dnajc7, conf.int = TRUE,
+                                          exponentiate = TRUE)),
+                          data.frame(model = "hsp70 + dnajc7 sensitvitiy",
+                                     nobs = glance(glm_hsp70dnajc7_sensitivity)$nobs,
+                                     ncontrols = sum(glm_hsp70dnajc7_sensitivity@resp$y ==0),
+                                     npatients = sum(glm_hsp70dnajc7_sensitivity@resp$y ==1),
+                                     tidy(glm_hsp70dnajc7_sensitivity, conf.int = TRUE,
+                                          exponentiate = TRUE)))
 # Write results to csv
 write.csv(summary_glms, "Results/table2_glm_results.csv")
 
@@ -438,25 +477,25 @@ write.csv(summary_glms, "Results/table2_glm_results.csv")
 
 #### Fit Cox PH models ####
 dfbase_noDE$cohort <- as.character(dfbase_noDE$cohort)
-cox1 <- coxph(Surv(time_sample2censor_mnths, outcome) ~ cohort + log(hsp70_ngperml) +
+cox1 <- coxph(Surv(time_sample2censor_mnths, survoutcome) ~ cohort + log(hsp70_ngperml) +
                   age_onset + dx_delay + site_onset,
               dfbase_noDE)
-cox2 <- coxph(Surv(time_sample2censor_mnths, outcome) ~ cohort + log(hsp90_ngperml) +
+cox2 <- coxph(Surv(time_sample2censor_mnths, survoutcome) ~ cohort + log(hsp90_ngperml) +
                   age_onset + dx_delay + site_onset,
               dfbase_noDE)
-cox3 <- coxph(Surv(time_sample2censor_mnths, outcome) ~ cohort + log(dnajc7_ngperml) +
+cox3 <- coxph(Surv(time_sample2censor_mnths, survoutcome) ~ cohort + log(dnajc7_ngperml) +
                   age_onset + dx_delay + site_onset,
               dfbase_noDE)
-cox4 <- coxph(Surv(time_sample2censor_mnths, outcome) ~ cohort + log(hsp70_ngperml) + log(dnajc7_ngperml) +
+cox4 <- coxph(Surv(time_sample2censor_mnths, survoutcome) ~ cohort + log(hsp70_ngperml) + log(dnajc7_ngperml) +
                   age_onset + dx_delay + site_onset,
               dfbase_noDE)
 
-coxres <- rbind(data.frame(model = 1, nobs = nobs(cox1), tidy(cox1, conf.int = TRUE, exponentiate = TRUE)),
-                data.frame(model = 2, nobs = nobs(cox2), tidy(cox2, conf.int = TRUE, exponentiate = TRUE)),
-                data.frame(model = 3, nobs = nobs(cox3),tidy(cox3, conf.int = TRUE, exponentiate = TRUE)),
-                data.frame(model = 4, nobs = nobs(cox4),tidy(cox4, conf.int = TRUE, exponentiate = TRUE)))
+coxres <- rbind(data.frame(model = 1, nobs = cox1$n, nevents = cox1$nevent, tidy(cox1, conf.int = TRUE, exponentiate = TRUE)),
+                data.frame(model = 2, nobs = cox2$n, nevents = cox2$nevent, tidy(cox2, conf.int = TRUE, exponentiate = TRUE)),
+                data.frame(model = 3, nobs = cox3$n, nevents = cox3$nevent, tidy(cox3, conf.int = TRUE, exponentiate = TRUE)),
+                data.frame(model = 4, nobs = cox4$n, nevents = cox4$nevent, tidy(cox4, conf.int = TRUE, exponentiate = TRUE)))
 
-write.csv(coxres, "Results/table2_coxPH_results.csv")
+write.csv(coxres, "Results/table2_coxPH_results.csv", row.names = FALSE)
 
 #### End of analysis ####
 
